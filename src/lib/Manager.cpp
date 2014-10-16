@@ -47,6 +47,8 @@
 #include "RelayWriter.h"
 #include "Injector.h"
 
+#include "kadbg.h"
+
 Manager::Manager() {
 	haltSignal=0;
 	status=USBM_IDLE;
@@ -244,6 +246,7 @@ void spinner(int dir) {
 }
 
 void Manager::start_control_relaying(){
+	dbgMsg("");
 	clean_mqueue();
 
 	haltSignal=SIGRTMIN;
