@@ -41,6 +41,7 @@
 #include "PacketFilter.h"
 #include "Manager.h"
 
+#include "kadbg.h"
 
 #ifndef NVALGRIND
 #define USEVALGRIND
@@ -224,6 +225,7 @@ void RelayWriter::relay_write_setup_valgrind() {
 }
 
 void RelayWriter::relay_write_valgrind() {
+	dbgMsg("");
 	if (!endpoint) {
 		relay_write_setup_valgrind();
 		return;

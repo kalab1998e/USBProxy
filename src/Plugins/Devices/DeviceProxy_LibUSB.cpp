@@ -29,6 +29,8 @@
 #include "TRACE.h"
 #include "HexString.h"
 
+#include "kadbg.h"
+
 int DeviceProxy_LibUSB::debugLevel=0;
 int resetCount = 1;
 
@@ -369,6 +371,7 @@ void DeviceProxy_LibUSB::send_data(__u8 endpoint,__u8 attributes,__u16 maxPacket
 void DeviceProxy_LibUSB::receive_data(__u8 endpoint,__u8 attributes,__u16 maxPacketSize,__u8** dataptr, int* length,int timeout) {
 	int rc;
 
+	dbgMsg("");
 	if (timeout<10) timeout=10;
 	switch (attributes & USB_ENDPOINT_XFERTYPE_MASK) {
 		case USB_ENDPOINT_XFER_CONTROL:
@@ -441,4 +444,22 @@ void DeviceProxy_LibUSB::release_interface(__u8 interface) {
 		int rc=libusb_release_interface(dev_handle,interface);
 		if (rc && rc!=-5) {fprintf(stderr,"Error (%d) releasing interface %d\n",rc,interface);}
 	}
+}
+
+// wrote 20141017 atsumi@aizulab.com
+// for Initial setting
+int DeviceProxy_LibUSB::get_configuration(void)
+{
+	int index, rc;
+	if ( ( rc = libusb_get_configuration( dev_handle, &index)) == 0) {
+		return rc;
+	}
+	return index;
+}
+
+// wrote 20141017 atsumi@aizulab.com
+// for Initial setting
+int DeviceProxy_LibUSB::set_configuration(__u8 index)
+{
+	return libusb_set_configuration( dev_handle, index);
 }

@@ -246,7 +246,6 @@ void spinner(int dir) {
 }
 
 void Manager::start_control_relaying(){
-	dbgMsg("");
 	clean_mqueue();
 
 	haltSignal=SIGRTMIN;
@@ -266,19 +265,28 @@ void Manager::start_control_relaying(){
 	device=new Device(deviceProxy);
 	device->print(0);
 
+	// modified 20141017 atsumi@aizulab.com
+	// It's sure for initial configuration
+	/*
+	deviceProxy->set_configuration(1);
+	setConfig(1);
+	*/
 	// modified 20141007 atsumi@aizulab.com
   // I think interfaces are claimed soon after connecting device.
 	//Claim interfaces
 	Configuration* cfg;
+
 	cfg=device->get_active_configuration();
 	int ifc_cnt=cfg->get_descriptor()->bNumInterfaces;
 	for (int i=0;i<ifc_cnt;i++) {
 	 	deviceProxy->claim_interface(i);
 	}
 
+	dbgMsg(""); fprintf( stderr, "rc=%d, status=%d\n", rc, status);
 	if (status!=USBM_SETUP) {stop_relaying();return;}
 
 	//create EP0 endpoint object
+	dbgMsg("");
 	usb_endpoint_descriptor desc_ep0;
 	desc_ep0.bLength=7;
 	desc_ep0.bDescriptorType=USB_DT_ENDPOINT;
@@ -289,6 +297,7 @@ void Manager::start_control_relaying(){
 	out_endpoints[0]=new Endpoint((Interface*)NULL,&desc_ep0);
 
 	if (status!=USBM_SETUP) {stop_relaying();return;}
+	dbgMsg("");
 	//setup EP0 message queues
 	char mqname[16];
 	struct mq_attr mqa;
@@ -300,11 +309,13 @@ void Manager::start_control_relaying(){
 	mqd_t mq_writersend=mq_open(mqname,O_RDWR | O_CREAT,S_IRWXU,&mqa);
 
 	if (status!=USBM_SETUP) {stop_relaying();return;}
+	dbgMsg("");
 	//setup EP0 Reader & Writer
 	out_readers[0]=new RelayReader(out_endpoints[0],hostProxy,mq_readersend,mq_writersend);
 	out_writers[0]=new RelayWriter(out_endpoints[0],deviceProxy,this,mq_readersend,mq_writersend);
 
 	//apply filters to relayers
+	dbgMsg("");
 	int i;
 	for(i=0;i<filterCount;i++) {
 		if (status!=USBM_SETUP) {stop_relaying();return;}
@@ -316,6 +327,7 @@ void Manager::start_control_relaying(){
 	}
 
 	//apply injectors to relayers
+	dbgMsg("");
 	for(i=0;i<injectorCount;i++) {
 		if (status!=USBM_SETUP) {stop_relaying();return;}
 		if (injectors[i]->device.test(device)) {
@@ -336,6 +348,7 @@ void Manager::start_control_relaying(){
 	}
 
 	//create injector threads
+	dbgMsg("");
 	if (injectorCount) {
 		injectorThreads=(pthread_t *)calloc(injectorCount,sizeof(pthread_t));
 		for(i=0;i<injectorCount;i++) {
@@ -345,28 +358,38 @@ void Manager::start_control_relaying(){
 		}
 	}
 
+	dbgMsg("");
 	rc=hostProxy->connect(device);
 	spinner(0);
+	dbgMsg("");
 	while (rc==ETIMEDOUT && status==USBM_SETUP) {
+		dbgMsg("");
 		spinner(1);
 		rc=hostProxy->connect(device);
 	}
+	dbgMsg(""); fprintf( stderr, "rc=%d, status=%d\n", rc, status);
 	if (rc!=0) {
 		status=USBM_SETUP_ABORT;
 		stop_relaying();
 		return;
 	}
 
+	dbgMsg("");
 	if (out_readers[0]) {
 		out_readers[0]->set_haltsignal(haltSignal);
 		pthread_create(&out_readerThreads[0],NULL,&RelayReader::relay_read_helper,out_readers[0]);
 	}
+	dbgMsg("");
 	if (status!=USBM_SETUP) {status=USBM_SETUP_ABORT;stop_relaying();return;}
+	dbgMsg("");
 	if (out_writers[0]) {
 		out_writers[0]->set_haltsignal(haltSignal);
 		pthread_create(&out_writerThreads[i],NULL,&RelayWriter::relay_write_helper,out_writers[0]);
 	}
+
+	dbgMsg("");
 	if (status!=USBM_SETUP) {stop_relaying();return;}
+	dbgMsg("");
 	status=USBM_RELAYING;
 }
 
@@ -464,9 +487,9 @@ void Manager::start_data_relaying() {
 	}
 
 	//Claim interfaces
-	for (ifc_idx=0;ifc_idx<ifc_cnt;ifc_idx++) {
-		deviceProxy->claim_interface(ifc_idx);
-	}
+	// for (ifc_idx=0;ifc_idx<ifc_cnt;ifc_idx++) {
+	//	deviceProxy->claim_interface(ifc_idx);
+	//}
 
 	for(i=1;i<16;i++) {
 		if (in_readers[i]) {
@@ -591,6 +614,20 @@ void Manager::stop_relaying(){
 }
 
 void Manager::setConfig(__u8 index) {
+	Configuration* cfg;
+
+	// modified 20141020 atsumi@aizulab.com
+	// release interface before set_configuration
+	cfg=device->get_active_configuration();
+	int ifc_cnt=cfg->get_descriptor()->bNumInterfaces;
+	for (int i=0;i<ifc_cnt;i++) {
+	 	deviceProxy->release_interface(i);
+	}
+
+	// modified 20141020 atsumi@aizulab.com
+	// I don't know whether it need follows code.
+	deviceProxy->set_configuration( index);
+
 	device->set_active_configuration(index);
 	DeviceQualifier* qualifier=device->get_device_qualifier();
 	if (qualifier) {
@@ -605,6 +642,15 @@ void Manager::setConfig(__u8 index) {
 		deviceProxy->setConfig(device->get_configuration(index),NULL,device->is_highspeed());
 		hostProxy->setConfig(device->get_configuration(index),NULL,device->is_highspeed());
 	}
+
+	// modified 20141020 atsumi@aizulab.com
+	// claim interface after set_configuration
+	cfg=device->get_active_configuration();
+	ifc_cnt=cfg->get_descriptor()->bNumInterfaces;
+	for (int i=0;i<ifc_cnt;i++) {
+	 	deviceProxy->claim_interface(i);
+	}
+	
 	start_data_relaying();
 }
 

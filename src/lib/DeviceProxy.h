@@ -53,6 +53,11 @@ public:
 	virtual void claim_interface(__u8 interface)=0;
 	virtual void release_interface(__u8 interface)=0;
 
+	// wrote 20141017 atsumi@aizulab.com
+	// for Initial setting
+	virtual int get_configuration()=0;
+	virtual int set_configuration(__u8 index)=0;
+
 	virtual __u8 get_address()=0;
 };
 

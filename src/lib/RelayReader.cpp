@@ -24,6 +24,9 @@
  * Created on: Dec 8, 2013
  */
 #include <stdio.h>
+// modified 20141021 atsumi@aizulab.com
+// temporary code for waiting while idle
+#include <unistd.h>
 #include <sched.h>
 #include <poll.h>
 #include "get_tid.h"
@@ -37,6 +40,7 @@
 #include "HostProxy.h"
 #include "Packet.h"
 
+#include "kadbg.h"
 
 RelayReader::RelayReader(Endpoint* _endpoint,Proxy* _proxy,mqd_t _sendQueue) {
 	haltSignal=0;
@@ -162,23 +166,42 @@ void RelayReader::relay_read() {
 
 	fprintf(stderr,"Starting reader thread (%ld) for EP%02x.\n",gettid(),endpoint);
 	while (!halt) {
+		dbgMsg("");
 		idle=true;
+		dbgMsg("");
 		if (!p) {
+			dbgMsg("");
 			buf=NULL;
 			length=0;
+			dbgMsg("");
 			proxy->receive_data(endpoint,attributes,maxPacketSize,&buf,&length,500);
+			dbgMsg("");
 			if (length) {
+				dbgMsg("");
 				p=new Packet(endpoint,buf,length);
+				dbgMsg("");
 				idle=false;
+				dbgMsg("");
 			}
 		}
+		dbgMsg("");
 		if (p && poll(&poll_out, 1, 500) && (poll_out.revents&POLLOUT)) {
+			dbgMsg("");
 			mq_send(sendQueue,(char*)&p,sizeof(Packet*),0);
+			dbgMsg("");
 			poll_out.revents=0;
+			dbgMsg("");
 			p=NULL;
+			dbgMsg("");
 		}
-		// if (idle) sched_yield();
+		dbgMsg(""); fprintf( stderr, "idle:%d\n", idle);
+		// modified 20141021 atsumi@aizulab.com
+		// temporary code for waiting while idle
+		//if (idle) sched_yield();
+		if (idle) usleep(500000);
+		dbgMsg("");
 		halt=haltsignal_check(haltSignal,&haltpoll,&haltfd);
+		dbgMsg(""); 
 	}
 	fprintf(stderr,"Finished reader thread (%ld) for EP%02x.\n",gettid(),endpoint);
 }

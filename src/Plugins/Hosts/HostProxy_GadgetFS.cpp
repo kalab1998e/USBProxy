@@ -39,6 +39,8 @@
 #include "Interface.h"
 #include "Endpoint.h"
 
+#include "kadbg.h"
+
 int HostProxy_GadgetFS::debugLevel=0;
 
 HostProxy_GadgetFS::HostProxy_GadgetFS(ConfigParser *cfg) {
@@ -147,23 +149,29 @@ int HostProxy_GadgetFS::generate_descriptor(Device* device) {
 int HostProxy_GadgetFS::connect(Device* device,int timeout) {
 	int status;
 
+	dbgMsg("");
 	if (p_is_connected) {fprintf(stderr,"GadgetFS already connected.\n"); return 0;}
 
+	dbgMsg("");
 	if (generate_descriptor(device)!=0) {return 1;}
 
+	dbgMsg("");
 	if (debugLevel>0) {
 		char* hex=hex_string((void*)descriptor,descriptorLength);
 		fprintf(stderr,"%s\n",hex);
 		free(hex);
 	}
 
+	dbgMsg("");
 	p_device_file = open_gadget();
 	if (p_device_file < 0) {
 		fprintf(stderr,"Fail on open %d %s\n",errno,strerror(errno));
 		return 1;
 	}
 
+	dbgMsg("");
 	status = write(p_device_file, descriptor, descriptorLength);
+	dbgMsg(""); fprintf( stderr, "p_device_file:%d, descriptor:%x, descriptorLength:%d\n", p_device_file, descriptor, descriptorLength);
 	if (status < 0) {
 		fprintf(stderr,"Fail on write %d %s\n",errno,strerror(errno));
 		close(p_device_file);
@@ -171,6 +179,7 @@ int HostProxy_GadgetFS::connect(Device* device,int timeout) {
 		return 1;
 	}
 
+	dbgMsg("");
 	p_is_connected = true;
 	return 0;
 }
@@ -408,6 +417,7 @@ bool HostProxy_GadgetFS::send_wait_complete(__u8 endpoint,int timeout) {
 }
 
 void HostProxy_GadgetFS::receive_data(__u8 endpoint,__u8 attributes,__u16 maxPacketSize,__u8** dataptr, int* length, int timeout) {
+	dbgMsg("");
 	if (!endpoint) {
 		fprintf(stderr,"trying to receive %d bytes on EP00\n",*length);
 		return;
