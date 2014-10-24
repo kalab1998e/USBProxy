@@ -10,7 +10,7 @@ merge.sh
 .project
 .cproject
 test/relaytest/relaytest
-resource/
+resources/
 papers/
 slides/
 typescript
