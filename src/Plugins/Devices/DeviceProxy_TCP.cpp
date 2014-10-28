@@ -141,9 +141,9 @@ void DeviceProxy_TCP::setConfig(Configuration* fs_cfg, Configuration* hs_cfg, bo
 	free(eps);
 }
 
-void DeviceProxy_TCP::claim_interface(__u8 interface) {}
+int DeviceProxy_TCP::claim_interface(__u8 interface) {}
 
-void DeviceProxy_TCP::release_interface(__u8 interface) {}
+int DeviceProxy_TCP::release_interface(__u8 interface) {}
 
 __u8 DeviceProxy_TCP::get_address() {
 	return 1;

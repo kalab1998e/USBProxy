@@ -44,6 +44,8 @@
 #include "Manager.h"
 #include "ConfigParser.h"
 
+#include "kadbg.h"
+
 static int debug=0;
 
 Manager* manager;
@@ -93,11 +95,15 @@ void handle_signal(int signum)
 			// modified 20140924 atsumi@aizulab.com
 			// restart manager for handling reset bus.
 			// begin
-			fprintf(stderr, "Received SIGHUP, restarting relaying...\n");
-			if (manager) {manager->stop_relaying();}
-			if (manager) {manager->start_control_relaying();}
-			// fprintf(stderr, "Received SIGHUP, restarting manager..\n");
-			// if ( manager) {manager->set_status( USBM_RESET);}
+			// fprintf(stderr, "Received SIGHUP, restarting relaying...\n");
+			// if (manager) {manager->stop_relaying();}
+			// if (manager) {manager->start_control_relaying();}
+			// -----
+			dbgMsg("");
+			if ( manager && manager->get_status() == USBM_RELAYING) {
+			 	dbgMsg(""); fprintf( stderr, "status: %d\n", manager->get_status());
+				manager->set_status( USBM_RESET);
+			}
 			// end
 			break;
 	}
@@ -213,22 +219,32 @@ extern "C" int main(int argc, char **argv)
 
 	int status;
 	do {
+		dbgMsg("");
 		manager=new Manager();
+		dbgMsg("");
 		manager->load_plugins(cfg);
+		dbgMsg("");
 		cfg->print_config();
 
+		dbgMsg("");
 		manager->start_control_relaying();
+		dbgMsg(""); fprintf( stderr, "status: %d\n", manager->get_status());
 		while ( ( status = manager->get_status()) == USBM_RELAYING) {
 			usleep(10000);
 		}
 
 		// Tidy up
+		dbgMsg(""); fprintf( stderr, "status: %d\n", status);
 		manager->stop_relaying();
-		manager->cleanup();
-		delete(manager);
+		//dbgMsg("");
+		//manager->cleanup();
 		// modified 20141015 atsumi@aizulab.com for reset bus
+		//dbgMsg("");
+		//delete(manager);
+		dbgMsg(""); fprintf( stderr, "status: %d\n", status);
 	} while ( status == USBM_RESET);
-	
+
+	dbgMsg("");
 	if (keylog_output_file) {
 		fclose(keylog_output_file);
 	}

@@ -32,6 +32,9 @@
 #include "kadbg.h"
 
 int DeviceProxy_LibUSB::debugLevel=0;
+
+// modified 20141023 atsumi@aizulab.com
+// for mirrorlink magic packet
 int resetCount = 1;
 
 static DeviceProxy_LibUSB *proxy;
@@ -110,12 +113,16 @@ DeviceProxy_LibUSB::DeviceProxy_LibUSB(ConfigParser *cfg)
 DeviceProxy_LibUSB::~DeviceProxy_LibUSB() {
 	// modified 20140926 atsumi@aizulab.com
 	// for handling events of hotploug.
+	dbgMsg(""); fprintf( stderr, "context: %x, callback_handle: %x\n", context, callback_handle);fflush(stderr);
 	if (context && callback_handle != -1) {
 		libusb_hotplug_deregister_callback( context, callback_handle);
 	}
 
+	dbgMsg(""); fprintf( stderr, "privateDevice:%x, dev_handle:%x\n", privateDevice, dev_handle);
 	if (privateDevice && dev_handle) {libusb_close(dev_handle);}
+	dbgMsg("");
 	if (privateContext && context) {libusb_exit(context);}
+	dbgMsg("");
 }
 
 int DeviceProxy_LibUSB::connect(int timeout) {
@@ -329,6 +336,16 @@ int DeviceProxy_LibUSB::control_request(const usb_ctrlrequest *setup_packet, int
 		free(hex);
 	}
 	*nbytes=rc;
+
+	// modified 20141023 atsumi@aizulab.com
+	// for mirrorlink magic packet
+	if ( setup_packet->bRequestType == 0x40 && setup_packet->bRequest == 0xf0
+			 && resetCount > 0) {
+		sleep(5);
+		resetCount--;
+		kill( 0, SIGHUP);
+	}
+
 	return 0;
 }
 
@@ -355,13 +372,19 @@ void DeviceProxy_LibUSB::send_data(__u8 endpoint,__u8 attributes,__u16 maxPacket
 			break;
 		case USB_ENDPOINT_XFER_BULK:
 			rc=libusb_bulk_transfer(dev_handle,endpoint,dataptr,length,&transferred,0);
-			if (rc) {fprintf(stderr,"Transfer error (%d) on Device EP%d\n",rc,endpoint);}
+			if (rc) {
+				fprintf(stderr,"Transfer error (%d) on Device EP%d\n",rc,endpoint);
+				perror("libusb_bulk_transfer");
+			}
 			//TODO retry transfer if incomplete
 			if (transferred!=length) {fprintf(stderr,"Incomplete Bulk transfer on EP%02x\n",endpoint);}
 			break;
 		case USB_ENDPOINT_XFER_INT:
 			rc=libusb_interrupt_transfer(dev_handle,endpoint,dataptr,length,&transferred,0);
-			if (rc) {fprintf(stderr,"Transfer error (%d) on Device EP%d\n",rc,endpoint);}
+			if (rc) {
+				fprintf(stderr,"Transfer error (%d) on Device EP%d\n",rc,endpoint);
+				perror("libusb_intrrupt_transfer");
+			}
 			//TODO retry transfer if incomplete
 			if (transferred!=length) {fprintf(stderr,"Incomplete Interrupt transfer on EP%02x\n",endpoint);}
 			break;
@@ -371,7 +394,6 @@ void DeviceProxy_LibUSB::send_data(__u8 endpoint,__u8 attributes,__u16 maxPacket
 void DeviceProxy_LibUSB::receive_data(__u8 endpoint,__u8 attributes,__u16 maxPacketSize,__u8** dataptr, int* length,int timeout) {
 	int rc;
 
-	dbgMsg("");
 	if (timeout<10) timeout=10;
 	switch (attributes & USB_ENDPOINT_XFERTYPE_MASK) {
 		case USB_ENDPOINT_XFER_CONTROL:
@@ -393,11 +415,18 @@ void DeviceProxy_LibUSB::receive_data(__u8 endpoint,__u8 attributes,__u16 maxPac
 				free(*dataptr);
 				*dataptr=NULL;
 				*length=0;
+				dbgMsg(""); fprintf(stderr,"Bulk Transfer error: %s (%d) on Device EP%02x\n", libusb_error_name(rc), rc,endpoint); 	perror("libusb_bulk_transfer");
 				// modified 20141002 atsumi@aizulab.com
 				//return;
 				break;
 			}
-			if (rc) {free(*dataptr);*dataptr=NULL;*length=0;fprintf(stderr,"Transfer error (%d) on Device EP%02x\n",rc,endpoint);}
+			if (rc) {
+				dbgMsg(libusb_error_name(rc));
+				free(*dataptr);
+				*dataptr=NULL;
+				*length=0;
+				fprintf(stderr,"Bulk Transfer error: %s (%d) on Device EP%02x\n", libusb_error_name(rc), rc,endpoint); perror( "libusb_bulk_transfer");
+			}
 			break;
 	  case USB_ENDPOINT_XFER_INT:
 			*dataptr=(__u8*)malloc(maxPacketSize);
@@ -406,15 +435,27 @@ void DeviceProxy_LibUSB::receive_data(__u8 endpoint,__u8 attributes,__u16 maxPac
 				free(*dataptr);
 				*dataptr=NULL;
 				*length=0;
+				dbgMsg(""); fprintf(stderr,"Interrupt Transfer error: %s (%d) on Device EP%02x\n",libusb_error_name(rc), rc,endpoint); 	perror( "libusb_interrupt_transfer");
 				// modified 20141002 atsumi@aizulab.com
 				// return;
 				break;
 			}
+
+			// modified 20141022 atsumi@aizulab.com
+			// why doesn't it need follow codes here?
+			if (rc) {
+				dbgMsg(libusb_error_name(rc));
+				free(*dataptr);
+				*dataptr=NULL;
+				*length=0;
+				fprintf(stderr,"Interrupt Transfer error %s(%d) on Device EP%02x\n",libusb_error_name(rc), rc,endpoint); perror( "libusb_interrupt_transfer");
+			}
+			break;
 	}
 }
 
-void DeviceProxy_LibUSB::claim_interface(__u8 interface) {
-	int rc;
+int DeviceProxy_LibUSB::claim_interface(__u8 interface) {
+	int rc = 0;
 
 	// for test code 20140912 atsumi@aizulab.com
 	__u8 buf[256];
@@ -432,18 +473,42 @@ void DeviceProxy_LibUSB::claim_interface(__u8 interface) {
 	*/
 	
 	if (is_connected()) {
-		int rc=libusb_claim_interface(dev_handle,interface);
+		rc=libusb_claim_interface(dev_handle,interface);
 		if (rc) {
 			fprintf(stderr,"Error %s(%d) claiming interface %d\n",libusb_error_name( rc), rc,interface);
 		}
 	}
+
+	return rc;
 }
 
-void DeviceProxy_LibUSB::release_interface(__u8 interface) {
+int DeviceProxy_LibUSB::release_interface(__u8 interface) {
+	int rc = 0;
 	if (is_connected()) {
-		int rc=libusb_release_interface(dev_handle,interface);
+		rc=libusb_release_interface(dev_handle,interface);
 		if (rc && rc!=-5) {fprintf(stderr,"Error (%d) releasing interface %d\n",rc,interface);}
 	}
+
+	return rc;
+}
+
+// wrote 20141022 atsumi@aizulab.com
+// for checking active interface anytime
+int DeviceProxy_LibUSB::get_active_interface(__u8 index)
+{
+	usb_ctrlrequest setup_packet;
+	__u8 buf[1];
+	int len=0, rc;
+
+	setup_packet.bRequestType=USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_INTERFACE;
+	setup_packet.bRequest=USB_REQ_GET_INTERFACE;
+	setup_packet.wValue= 0;
+	setup_packet.wIndex=index;
+	setup_packet.wLength=1;
+	len = 0;
+	rc = control_request(&setup_packet,&len,buf);
+	if ( rc < 0) return rc;
+	return buf[0];
 }
 
 // wrote 20141017 atsumi@aizulab.com

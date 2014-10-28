@@ -50,8 +50,8 @@ public:
 	virtual void setConfig(Configuration* fs_cfg,Configuration* hs_cfg,bool hs)=0;
 	virtual char* toString() {return NULL;}
 
-	virtual void claim_interface(__u8 interface)=0;
-	virtual void release_interface(__u8 interface)=0;
+	virtual int claim_interface(__u8 interface)=0;
+	virtual int release_interface(__u8 interface)=0;
 
 	// wrote 20141017 atsumi@aizulab.com
 	// for Initial setting

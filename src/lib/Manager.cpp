@@ -265,12 +265,6 @@ void Manager::start_control_relaying(){
 	device=new Device(deviceProxy);
 	device->print(0);
 
-	// modified 20141017 atsumi@aizulab.com
-	// It's sure for initial configuration
-	/*
-	deviceProxy->set_configuration(1);
-	setConfig(1);
-	*/
 	// modified 20141007 atsumi@aizulab.com
   // I think interfaces are claimed soon after connecting device.
 	//Claim interfaces
@@ -279,14 +273,19 @@ void Manager::start_control_relaying(){
 	cfg=device->get_active_configuration();
 	int ifc_cnt=cfg->get_descriptor()->bNumInterfaces;
 	for (int i=0;i<ifc_cnt;i++) {
-	 	deviceProxy->claim_interface(i);
+	 	int rc = deviceProxy->claim_interface(i);
+		dbgMsg(""); fprintf(stderr, "rc: %d\n", rc);
+		if ( rc < 0) {
+			dbgMsg("");
+			kill( 0, SIGHUP);
+		}
 	}
 
-	dbgMsg(""); fprintf( stderr, "rc=%d, status=%d\n", rc, status);
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	if (status!=USBM_SETUP) {stop_relaying();return;}
 
 	//create EP0 endpoint object
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	usb_endpoint_descriptor desc_ep0;
 	desc_ep0.bLength=7;
 	desc_ep0.bDescriptorType=USB_DT_ENDPOINT;
@@ -297,7 +296,7 @@ void Manager::start_control_relaying(){
 	out_endpoints[0]=new Endpoint((Interface*)NULL,&desc_ep0);
 
 	if (status!=USBM_SETUP) {stop_relaying();return;}
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	//setup EP0 message queues
 	char mqname[16];
 	struct mq_attr mqa;
@@ -309,13 +308,13 @@ void Manager::start_control_relaying(){
 	mqd_t mq_writersend=mq_open(mqname,O_RDWR | O_CREAT,S_IRWXU,&mqa);
 
 	if (status!=USBM_SETUP) {stop_relaying();return;}
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	//setup EP0 Reader & Writer
 	out_readers[0]=new RelayReader(out_endpoints[0],hostProxy,mq_readersend,mq_writersend);
 	out_writers[0]=new RelayWriter(out_endpoints[0],deviceProxy,this,mq_readersend,mq_writersend);
 
 	//apply filters to relayers
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	int i;
 	for(i=0;i<filterCount;i++) {
 		if (status!=USBM_SETUP) {stop_relaying();return;}
@@ -327,7 +326,7 @@ void Manager::start_control_relaying(){
 	}
 
 	//apply injectors to relayers
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	for(i=0;i<injectorCount;i++) {
 		if (status!=USBM_SETUP) {stop_relaying();return;}
 		if (injectors[i]->device.test(device)) {
@@ -348,7 +347,7 @@ void Manager::start_control_relaying(){
 	}
 
 	//create injector threads
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	if (injectorCount) {
 		injectorThreads=(pthread_t *)calloc(injectorCount,sizeof(pthread_t));
 		for(i=0;i<injectorCount;i++) {
@@ -358,12 +357,12 @@ void Manager::start_control_relaying(){
 		}
 	}
 
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	rc=hostProxy->connect(device);
 	spinner(0);
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	while (rc==ETIMEDOUT && status==USBM_SETUP) {
-		dbgMsg("");
+		dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 		spinner(1);
 		rc=hostProxy->connect(device);
 	}
@@ -374,22 +373,22 @@ void Manager::start_control_relaying(){
 		return;
 	}
 
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	if (out_readers[0]) {
 		out_readers[0]->set_haltsignal(haltSignal);
 		pthread_create(&out_readerThreads[0],NULL,&RelayReader::relay_read_helper,out_readers[0]);
 	}
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	if (status!=USBM_SETUP) {status=USBM_SETUP_ABORT;stop_relaying();return;}
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	if (out_writers[0]) {
 		out_writers[0]->set_haltsignal(haltSignal);
 		pthread_create(&out_writerThreads[i],NULL,&RelayWriter::relay_write_helper,out_writers[0]);
 	}
 
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	if (status!=USBM_SETUP) {stop_relaying();return;}
-	dbgMsg("");
+	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
 	status=USBM_RELAYING;
 }
 
@@ -512,95 +511,159 @@ void Manager::start_data_relaying() {
 }
 
 void Manager::stop_relaying(){
+	dbgMsg("");
 	if (status==USBM_SETUP) {status=USBM_SETUP_ABORT;return;}
-	if (status!=USBM_RELAYING && status!=USBM_SETUP_ABORT) return;
-	status=USBM_STOPPING;
+	dbgMsg(""); fprintf( stderr, "status: %d\n", status);
+	// modified 20141028 atsumi@aizulab.com
+	// for reset status
+	//	if (status!=USBM_RELAYING && status!=USBM_SETUP_ABORT) {
+	if (status != USBM_RESET && status!=USBM_RELAYING
+			&& status!=USBM_SETUP_ABORT) { 
+		dbgMsg("");
+		return;
+	}
+	dbgMsg("");
+	// modified 20141028 atsumi@aizulab.com
+	// for reset status
+	if ( status != USBM_RESET) status=USBM_STOPPING;
 
+	dbgMsg("");
 	int i;
 	//signal all injector threads to stop ASAP
+	dbgMsg("");
 	for(i=0;i<injectorCount;i++) {
+		dbgMsg("");
 		if (injectorThreads && injectorThreads[i]) pthread_kill(injectorThreads[i],haltSignal);
 	}
 
 	//signal all relayer threads to stop ASAP
+	dbgMsg("");
 	for(i=0;i<16;i++) {
+		dbgMsg("");
 		if (in_readerThreads[i]) {pthread_kill(in_readerThreads[i],haltSignal);}
+		dbgMsg("");
 		if (in_writerThreads[i]) {pthread_kill(in_writerThreads[i],haltSignal);}
+		dbgMsg("");
 		if (out_readerThreads[i]) {pthread_kill(out_readerThreads[i],haltSignal);}
+		dbgMsg("");
 		if (out_writerThreads[i]) {pthread_kill(out_writerThreads[i],haltSignal);}
 	}
 
 	//wait for all injector threads to stop
+	dbgMsg("");
 	if (injectorThreads) {
+		dbgMsg("");
 		for(i=0;i<injectorCount;i++) {
+			dbgMsg("");
 			if (injectorThreads[i]) {
+				dbgMsg("");
 				pthread_join(injectorThreads[i],NULL);
+				dbgMsg("");
 				injectorThreads[i]=0;
 			}
 		}
+		dbgMsg("");
 		free(injectorThreads);
+		dbgMsg("");
 		injectorThreads=NULL;
 	}
 
 
 	//wait for all relayer threads to stop, then delete relayer objects
+	dbgMsg("");
 	for(i=0;i<16;i++) {
+		dbgMsg("");
 		if (in_endpoints[i]) {in_endpoints[i]=NULL;}
+		dbgMsg("");
 		if (in_readers[i]) {
+			dbgMsg("");
 			if (in_readerThreads[i]) {
+				dbgMsg("");
 				pthread_join(in_readerThreads[i],NULL);
+				dbgMsg("");
 				in_readerThreads[i]=0;
 			}
+			dbgMsg("");
 			delete(in_readers[i]);
+			dbgMsg("");
 			in_readers[i]=NULL;
 		}
+		dbgMsg("");
 		if (in_writers[i]) {
+			dbgMsg("");
 			if (in_writerThreads[i]) {
+				dbgMsg("");
 				pthread_join(in_writerThreads[i],NULL);
+				dbgMsg("");
 				in_writerThreads[i]=0;
 			}
+			dbgMsg("");
 			delete(in_writers[i]);
+			dbgMsg("");
 			in_writers[i]=NULL;
 		}
 
+		dbgMsg("");
 		if (out_endpoints[i]) {out_endpoints[i]=NULL;}
+		dbgMsg("");
 		if (out_readers[i]) {
+			dbgMsg("");
 			if (out_readerThreads[i]) {
+				dbgMsg("");
 				pthread_join(out_readerThreads[i],NULL);
+				dbgMsg("");
 				out_readerThreads[i]=0;
 			}
+			dbgMsg("");
 			delete(out_readers[i]);
+			dbgMsg("");
 			out_readers[i]=NULL;
 		}
+		dbgMsg("");
 		if (out_writers[i]) {
+			dbgMsg("");
 			if (out_writerThreads[i]) {
+				dbgMsg("");
 				pthread_join(out_writerThreads[i],NULL);
+				dbgMsg("");
 				out_writerThreads[i]=0;
 			}
-			delete(out_writers[i]);
+			dbgMsg("");
+			// delete(out_writers[i]); temporary comment out.
+			dbgMsg("");
 			out_writers[i]=NULL;
 		}
 	}
 
+	dbgMsg("");
 	if (out_endpoints[0]) {delete(out_endpoints[0]);out_endpoints[0]=NULL;}
 
 	//Release interfaces
+	dbgMsg("");
 	int ifc_idx;
+	dbgMsg("");
 	if (device) {
+		dbgMsg("");
 		Configuration* cfg=device->get_active_configuration();
+		dbgMsg("");
 		int ifc_cnt=cfg->get_descriptor()->bNumInterfaces;
+		dbgMsg("");
 		for (ifc_idx=0;ifc_idx<ifc_cnt;ifc_idx++) {
+			dbgMsg("");
 			deviceProxy->release_interface(ifc_idx);
 		}
 	}
 
 	//disconnect from host
+	dbgMsg("");
 	hostProxy->disconnect();
 
 	//disconnect device proxy
+	dbgMsg("");
 	deviceProxy->disconnect();
 
 	//clean up device model & endpoints
+	dbgMsg("");
 	if (device) {
 		// modified 20141001 atsumi@aizulab.com
 		// temporary debug because it's invalid pointer for free()
@@ -608,9 +671,13 @@ void Manager::stop_relaying(){
 		device=NULL;
 	}
 
+	dbgMsg("");
 	clean_mqueue();
 
-	status=USBM_IDLE;
+	dbgMsg(""); fprintf( stderr, "status: %d\n", status);
+	// modified 20141028 atsumi@aizulab.com
+  // for reset status
+	if ( status != USBM_RESET) status=USBM_IDLE;
 }
 
 void Manager::setConfig(__u8 index) {
@@ -656,12 +723,18 @@ void Manager::setConfig(__u8 index) {
 
 /* Delete all injectors and filters - easier to manage */
 void Manager::cleanup() {
+	dbgMsg("");
 	while(injectorCount)
 		remove_injector(injectorCount-1, true);
+	dbgMsg(""); fprintf( stderr, "filterCount: %x\n", filterCount);
 	while(filterCount)
 		remove_filter(filterCount-1, true);
+	dbgMsg(""); fprintf( stderr, "deviceProxy: %x\n", deviceProxy); fflush(stderr);
 	delete deviceProxy;
+	dbgMsg("");
 	deviceProxy = NULL;
+	dbgMsg("");
 	delete hostProxy;
+	dbgMsg("");
 	hostProxy = NULL;
 }

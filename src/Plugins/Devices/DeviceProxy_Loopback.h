@@ -68,8 +68,8 @@ public:
 	void setConfig(Configuration* fs_cfg,Configuration* hs_cfg,bool hs);
 	char* toString() {return (char *) "Lookback device";}
 
-	void claim_interface(__u8 interface);
-	void release_interface(__u8 interface);
+	int claim_interface(__u8 interface);
+	int release_interface(__u8 interface);
 
 	// wrote 20141017 atsumi@aizulab.com
 	// for Initial setting

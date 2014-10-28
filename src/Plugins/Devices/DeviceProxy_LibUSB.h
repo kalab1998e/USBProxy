@@ -65,13 +65,17 @@ public:
 
 	void setConfig(Configuration* fs_cfg,Configuration* hs_cfg,bool hs) {}
 
-	void claim_interface(__u8 interface);
-	void release_interface(__u8 interface);
+	int claim_interface(__u8 interface);
+	int release_interface(__u8 interface);
 
 	// wrote 20141017 atsumi@aizulab.com
 	// for Initial setting
 	int get_configuration();
 	int set_configuration(__u8 index);
+
+	// wrote 20141022 atsumi@aizulab.com
+	// for checking active interface anytime
+	int get_active_interface(__u8 index);
 
 	__u8 get_address();
 	char* toString();
