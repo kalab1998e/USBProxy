@@ -275,10 +275,6 @@ void Manager::start_control_relaying(){
 	for (int i=0;i<ifc_cnt;i++) {
 	 	int rc = deviceProxy->claim_interface(i);
 		dbgMsg(""); fprintf(stderr, "rc: %d\n", rc);
-		if ( rc < 0) {
-			dbgMsg("");
-			kill( 0, SIGHUP);
-		}
 	}
 
 	dbgMsg(""); fprintf( stderr, "status=%d\n", rc, status);
