@@ -197,8 +197,8 @@ void RelayReader::relay_read() {
 		dbgMsg(""); fprintf( stderr, "idle:%d\n", idle);
 		// modified 20141021 atsumi@aizulab.com
 		// temporary code for waiting while idle
-		//if (idle) sched_yield();
-		if (idle) usleep(500000);
+		if (idle) sched_yield();
+		// if (idle) usleep(500000);
 		dbgMsg("");
 		halt=haltsignal_check(haltSignal,&haltpoll,&haltfd);
 		dbgMsg(""); 
